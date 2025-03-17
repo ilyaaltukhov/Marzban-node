@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
-from config import XRAY_ASSETS_PATH, XRAY_EXECUTABLE_PATH
+from config import XRAY_ASSETS_PATH, XRAY_EXECUTABLE_PATH, XRAY_CONFIG_PATH
 from logger import logger
 from xray import XRayConfig, XRayCore
 
@@ -114,8 +114,20 @@ class Service(object):
     def start(self, session_id: UUID = Body(embed=True), config: str = Body(embed=True)):
         self.match_session_id(session_id)
 
+        if XRAY_CONFIG_PATH and XRAY_CONFIG_PATH.strip():
+            try:
+                with open(XRAY_CONFIG_PATH, 'r') as f:
+                    config_str = f.read()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to load config from file: {exc}"
+                )
+        else:
+            config_str = config
+
         try:
-            config = XRayConfig(config, self.client_ip)
+            config = XRayConfig(config_str, self.client_ip)
         except json.decoder.JSONDecodeError as exc:
             raise HTTPException(
                 status_code=422,
@@ -168,9 +180,22 @@ class Service(object):
 
     def restart(self, session_id: UUID = Body(embed=True), config: str = Body(embed=True)):
         self.match_session_id(session_id)
+        
+        if XRAY_CONFIG_PATH and XRAY_CONFIG_PATH.strip():
+            try:
+                with open(XRAY_CONFIG_PATH, 'r') as f:
+                    config_str = f.read()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to load config from file: {exc}"
+                )
+
+        else:
+            config_str = config
 
         try:
-            config = XRayConfig(config, self.client_ip)
+            config = XRayConfig(config_str, self.client_ip)
         except json.decoder.JSONDecodeError as exc:
             raise HTTPException(
                 status_code=422,
