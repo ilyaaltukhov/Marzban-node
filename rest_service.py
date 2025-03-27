@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
-from config import XRAY_ASSETS_PATH, XRAY_CONFIG_SAVE_PATH, XRAY_EXECUTABLE_PATH, XRAY_CONFIG_PATH
+from config import XRAY_ASSETS_PATH, XRAY_CONFIG_SAVE_PATH, XRAY_EXECUTABLE_PATH, XRAY_CONFIG_PATH, XRAY_INBOUND_TAG
 from logger import logger
 from xray import XRayConfig, XRayCore
 
@@ -26,6 +26,34 @@ def validation_exception_handler(request: Request, exc: RequestValidationError):
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=jsonable_encoder({"detail": details}),
     )
+
+
+def transfer_clients(source_json: str, destination_json: str, tag: str = "vless") -> str:
+    source_config = json.loads(source_json)
+    destination_config = json.loads(destination_json)
+    
+    def find_inbound(config: dict, tag: str) -> dict:
+        for inbound in config.get("inbounds", []):
+            if inbound.get("tag") == tag:
+                return inbound
+        return None
+
+    source_inbound = find_inbound(source_config, tag)
+    destination_inbound = find_inbound(destination_config, tag)
+    
+    if not source_inbound:
+        raise ValueError(f"No inbound with tag '{tag}' in source config")
+    if not destination_inbound:
+        raise ValueError(f"No inbound with tag '{tag}' in destination config")
+    
+    clients = source_inbound.get("settings", {}).get("clients", [])
+    
+    if "settings" not in destination_inbound or not isinstance(destination_inbound["settings"], dict):
+        destination_inbound["settings"] = {}
+    
+    destination_inbound["settings"]["clients"] = clients
+    
+    return json.dumps(destination_config, indent=2, ensure_ascii=False)
 
 
 class Service(object):
@@ -121,7 +149,9 @@ class Service(object):
             try:
                 with open(XRAY_CONFIG_PATH, 'r') as f:
                     config_str = f.read()
+                    config_str = transfer_clients(config, config_str, XRAY_INBOUND_TAG)
             except Exception as exc:
+                logger.error(f"Failed to load config from file: {exc}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to load config from file: {exc}"
@@ -132,6 +162,7 @@ class Service(object):
         try:
             config = XRayConfig(config_str, self.client_ip)
         except json.decoder.JSONDecodeError as exc:
+            logger.error(f'Failed to decode config: {exc}')
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -191,7 +222,9 @@ class Service(object):
             try:
                 with open(XRAY_CONFIG_PATH, 'r') as f:
                     config_str = f.read()
+                    config_str = transfer_clients(config, config_str, XRAY_INBOUND_TAG)
             except Exception as exc:
+                logger.error(f"Failed to load config from file: {exc}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to load config from file: {exc}"
@@ -203,6 +236,7 @@ class Service(object):
         try:
             config = XRayConfig(config_str, self.client_ip)
         except json.decoder.JSONDecodeError as exc:
+            logger.error(f'Failed to decode config: {exc}')
             raise HTTPException(
                 status_code=422,
                 detail={
