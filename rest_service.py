@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
-from config import XRAY_ASSETS_PATH, XRAY_EXECUTABLE_PATH, XRAY_CONFIG_PATH
+from config import XRAY_ASSETS_PATH, XRAY_CONFIG_SAVE_PATH, XRAY_EXECUTABLE_PATH, XRAY_CONFIG_PATH
 from logger import logger
 from xray import XRayConfig, XRayCore
 
@@ -114,6 +114,9 @@ class Service(object):
     def start(self, session_id: UUID = Body(embed=True), config: str = Body(embed=True)):
         self.match_session_id(session_id)
 
+        with open(XRAY_CONFIG_SAVE_PATH, "w") as f:
+            f.write(config)
+
         if XRAY_CONFIG_PATH and XRAY_CONFIG_PATH.strip():
             try:
                 with open(XRAY_CONFIG_PATH, 'r') as f:
@@ -180,6 +183,9 @@ class Service(object):
 
     def restart(self, session_id: UUID = Body(embed=True), config: str = Body(embed=True)):
         self.match_session_id(session_id)
+
+        with open(XRAY_CONFIG_SAVE_PATH, "w") as f:
+            f.write(config)
         
         if XRAY_CONFIG_PATH and XRAY_CONFIG_PATH.strip():
             try:
